@@ -1,10 +1,10 @@
-  import { useState } from "react"
+import { useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 
 export function SignupPage() {
   const navigate = useNavigate()
-  const { signup, isLoading } = useAuth()
+  const { signup, loading, error: authError } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -21,7 +21,7 @@ export function SignupPage() {
 
     try {
       await signup(email, password)
-      navigate("/login", {
+      navigate("/login", { 
         replace: true,
         state: { message: "Account created successfully! Please log in." }
       })
@@ -53,9 +53,9 @@ export function SignupPage() {
 
             <div className="bg-gray-800 rounded-3xl p-8 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
               <form onSubmit={handleSubmit} className="space-y-6">
-                {error && (
+                {(error || authError) && (
                   <div className="p-3 text-sm text-red-400 bg-red-900/50 rounded-xl border border-red-500/20" role="alert">
-                    {error}
+                    {error || authError}
                   </div>
                 )}
 
@@ -138,9 +138,9 @@ export function SignupPage() {
                   type="submit"
                   className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl
                   transition-all duration-200 font-medium"
-                  disabled={isLoading}
+                  disabled={loading}
                 >
-                  {isLoading ? "Creating account..." : "Create Account"}
+                  {loading ? "Creating account..." : "Create Account"}
                 </button>
               </form>
             </div>

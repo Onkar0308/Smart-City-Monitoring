@@ -1,88 +1,139 @@
-import bcrypt from 'bcryptjs';
-import { db } from '../lib/db';
+import jwt from 'jsonwebtoken';
+import { User, IUser } from '../models/User';
 import { emailService } from './email';
 
-interface UserPreferences {
-  notifications: boolean;
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_EXPIRES_IN = '24h';
 
-interface User {
-  _id: string;
+interface UserResponse {
+  id: string;
   email: string;
   displayName?: string;
   userName?: string;
-  preferences: UserPreferences;
+  preferences: {
+    notifications: boolean;
+  };
   createdAt: Date;
 }
 
-const DEFAULT_PREFERENCES: UserPreferences = {
-  notifications: true
+const generateToken = (userId: string): string => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 };
 
-const SALT_ROUNDS = 10;
+const convertToUserResponse = (user: IUser): UserResponse => {
+  return {
+    id: user._id,
+    email: user.email,
+    displayName: user.displayName,
+    userName: user.userName,
+    preferences: user.preferences,
+    createdAt: user.createdAt
+  };
+};
 
 export const authService = {
-  async signup(email: string, password: string): Promise<User> {
-    // Check if user already exists
-    const existingUser = await db.findUser(email);
-    if (existingUser) {
-      throw new Error('User already exists');
+  async signup(email: string, password: string): Promise<{ user: UserResponse; token: string }> {
+    try {
+      // Check if user already exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        throw new Error('Email already registered');
+      }
+
+      // Create new user
+      const user = new User({
+        email,
+        password,
+        preferences: { notifications: true },
+        createdAt: new Date()
+      });
+
+      await user.save();
+      
+      // Send welcome email
+      await emailService.sendWelcomeEmail(email);
+
+      const token = generateToken(user._id);
+
+      return {
+        user: convertToUserResponse(user),
+        token
+      };
+    } catch (error) {
+      console.error('Signup error:', error);
+      throw error;
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-
-    // Create new user
-    const newUser = await db.createUser({
-      email,
-      password: hashedPassword,
-      preferences: DEFAULT_PREFERENCES,
-      createdAt: new Date()
-    });
-
-    // Send welcome email
-    await emailService.sendWelcomeEmail(email);
-
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = newUser;
-    return userWithoutPassword;
   },
 
-  async login(email: string, password: string): Promise<User> {
-    // Find user
-    const user = await db.findUser(email);
-    if (!user) {
-      throw new Error('Invalid email or password');
-    }
+  async login(email: string, password: string): Promise<{ user: UserResponse; token: string }> {
+    try {
+      // Find user by email
+      const user = await User.findOne({ email });
+      if (!user) {
+        throw new Error('Invalid email or password');
+      }
 
-    // Verify password
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      throw new Error('Invalid email or password');
-    }
+      // Check password
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        throw new Error('Invalid email or password');
+      }
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+      const token = generateToken(user._id);
+
+      return {
+        user: convertToUserResponse(user),
+        token
+      };
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   },
 
-  async getCurrentUser(): Promise<User | null> {
-    const userJson = localStorage.getItem('currentUser');
-    if (!userJson) return null;
-    return JSON.parse(userJson);
-  },
+  async getCurrentUser(token: string): Promise<UserResponse | null> {
+    try {
+      if (!token) return null;
 
-  async updateUser(userId: string, updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>): Promise<User> {
-    const updatedUser = await db.updateUser(userId, updates);
-    if (!updatedUser) {
-      throw new Error('User not found');
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const user = await User.findById(decoded.userId);
+
+      return user ? convertToUserResponse(user) : null;
+    } catch (error) {
+      console.error('Get current user error:', error);
+      return null;
     }
-
-    const { password: _, ...userWithoutPassword } = updatedUser;
-    return userWithoutPassword;
   },
 
-  async logout(): Promise<void> {
-    localStorage.removeItem('currentUser');
+  async updateUser(
+    userId: string,
+    updates: Partial<Omit<UserResponse, 'id' | 'email' | 'createdAt'>>
+  ): Promise<UserResponse> {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Update user fields
+      if (updates.displayName) user.displayName = updates.displayName;
+      if (updates.userName) user.userName = updates.userName;
+      if (updates.preferences) user.preferences = updates.preferences;
+
+      await user.save();
+      return convertToUserResponse(user);
+    } catch (error) {
+      console.error('Update user error:', error);
+      throw error;
+    }
+  },
+
+  verifyToken(token: string): boolean {
+    try {
+      jwt.verify(token, JWT_SECRET);
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 };

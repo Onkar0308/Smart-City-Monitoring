@@ -10,4 +10,25 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  // Ensure proper handling of environment variables
+  envPrefix: 'VITE_',
+  // Optimize deps to ensure proper bundling of Firebase
+  optimizeDeps: {
+    include: [
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore',
+      'firebase/analytics'
+    ]
+  },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/analytics'],
+        }
+      }
+    }
+  }
 })

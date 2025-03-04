@@ -7,12 +7,16 @@ export function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
-  const { login, isLoading } = useAuth()
+  const { login, loading, error: authError } = useAuth()
   const successMessage = location.state?.message
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await login(email, password)
+    try {
+      await login(email, password)
+    } catch (err) {
+      // Error is handled by AuthContext
+    }
   }
 
   return (
@@ -43,6 +47,13 @@ export function LoginPage() {
                     {successMessage}
                   </div>
                 )}
+
+                {authError && (
+                  <div className="p-3 text-sm text-red-400 bg-red-900/50 rounded-xl border border-red-500/20" role="alert">
+                    {authError}
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="email" className="block text-sm text-gray-300 font-medium mb-2">
                     Email
@@ -118,9 +129,9 @@ export function LoginPage() {
                   type="submit"
                   className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl
                   transition-all duration-200 font-medium"
-                  disabled={isLoading}
+                  disabled={loading}
                 >
-                  {isLoading ? "Signing in..." : "Sign In"}
+                  {loading ? "Signing in..." : "Sign In"}
                 </button>
               </form>
             </div>

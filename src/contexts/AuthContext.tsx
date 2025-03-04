@@ -1,97 +1,146 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { authService } from '@/services/auth';
-interface UserPreferences {
-  notifications: boolean;
-}
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { authService } from '../services/auth';
 
-interface User {
-  _id: string;
+interface UserResponse {
+  id: string;
   email: string;
   displayName?: string;
   userName?: string;
-  preferences: UserPreferences;
+  preferences: {
+    notifications: boolean;
+  };
   createdAt: Date;
 }
 
 interface AuthContextType {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  user: UserResponse | null;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
   signup: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>) => Promise<void>;
+  updateUser: (updates: Partial<Omit<UserResponse, 'id' | 'email' | 'createdAt'>>) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<UserResponse | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const initAuth = async () => {
-      const currentUser = await authService.getCurrentUser();
-      if (currentUser) {
-        setUser(currentUser);
-        setIsAuthenticated(true);
+      const storedToken = localStorage.getItem('authToken');
+      if (storedToken) {
+        try {
+          const isValid = authService.verifyToken(storedToken);
+          if (isValid) {
+            const userData = await authService.getCurrentUser(storedToken);
+            if (userData) {
+              setUser(userData);
+              setToken(storedToken);
+            } else {
+              localStorage.removeItem('authToken');
+            }
+          } else {
+            localStorage.removeItem('authToken');
+          }
+        } catch (err) {
+          console.error('Auth initialization error:', err);
+          localStorage.removeItem('authToken');
+        }
       }
+      setLoading(false);
     };
+
     initAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    try {
-      setIsLoading(true);
-      const loggedInUser = await authService.login(email, password);
-      localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
-      setUser(loggedInUser);
-      setIsAuthenticated(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const signup = async (email: string, password: string) => {
     try {
-      setIsLoading(true);
+      setLoading(true);
+      setError(null);
+      // Don't set user and token after signup - user needs to login explicitly
       await authService.signup(email, password);
-      // Don't auto-login after signup
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create account');
+      throw err;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const updateUser = async (updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>) => {
-    if (!user || !user._id) return;
+  const login = async (email: string, password: string) => {
     try {
-      setIsLoading(true);
-      const updatedUser = await authService.updateUser(user._id.toString(), updates);
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      setLoading(true);
+      setError(null);
+      const { user: userData, token: newToken } = await authService.login(email, password);
+      setUser(userData);
+      setToken(newToken);
+      localStorage.setItem('authToken', newToken);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid email or password');
+      throw err;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+    try {
+      setLoading(true);
+      setError(null);
+      localStorage.removeItem('authToken');
+      setUser(null);
+      setToken(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to logout');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateUser = async (updates: Partial<Omit<UserResponse, 'id' | 'email' | 'createdAt'>>) => {
+    if (!user || !token) throw new Error('No user logged in');
+    try {
+      setLoading(true);
+      setError(null);
+      const updatedUser = await authService.updateUser(user.id, updates);
+      setUser(updatedUser);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update user');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const value = {
+    user,
+    token,
+    loading,
+    error,
+    signup,
+    login,
+    logout,
+    updateUser
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, signup, logout, updateUser }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
