@@ -1,12 +1,14 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 
 export function LoginPage() {
+  const location = useLocation()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const { login, isLoading } = useAuth()
+  const successMessage = location.state?.message
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +38,11 @@ export function LoginPage() {
 
             <div className="bg-gray-800 rounded-3xl p-10 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
               <form onSubmit={handleSubmit} className="space-y-6">
+                {successMessage && (
+                  <div className="p-3 text-sm text-green-400 bg-green-900/50 rounded-xl border border-green-500/20" role="alert">
+                    {successMessage}
+                  </div>
+                )}
                 <div>
                   <label htmlFor="email" className="block text-sm text-gray-300 font-medium mb-2">
                     Email

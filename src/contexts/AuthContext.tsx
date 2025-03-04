@@ -1,12 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { authService } from '@/services/auth';
-
 interface UserPreferences {
   notifications: boolean;
 }
 
 interface User {
-  id: string;
+  _id: string;
   email: string;
   displayName?: string;
   userName?: string;
@@ -21,7 +20,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<Omit<User, 'id' | 'email' | 'createdAt'>>) => Promise<void>;
+  updateUser: (updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,20 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signup = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      const newUser = await authService.signup(email, password);
-      localStorage.setItem('currentUser', JSON.stringify(newUser));
-      setUser(newUser);
-      setIsAuthenticated(true);
+      await authService.signup(email, password);
+      // Don't auto-login after signup
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateUser = async (updates: Partial<Omit<User, 'id' | 'email' | 'createdAt'>>) => {
-    if (!user) return;
+  const updateUser = async (updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>) => {
+    if (!user || !user._id) return;
     try {
       setIsLoading(true);
-      const updatedUser = await authService.updateUser(user.id, updates);
+      const updatedUser = await authService.updateUser(user._id.toString(), updates);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       setUser(updatedUser);
     } finally {

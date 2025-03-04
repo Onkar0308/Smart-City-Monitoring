@@ -1,20 +1,14 @@
+import bcrypt from 'bcryptjs';
+import { db } from '../lib/db';
+import { emailService } from './email';
+
 interface UserPreferences {
   notifications: boolean;
 }
 
 interface User {
-  id: string;
+  _id: string;
   email: string;
-  displayName?: string;
-  userName?: string;
-  preferences: UserPreferences;
-  createdAt: Date;
-}
-
-interface DbUser {
-  id: string;
-  email: string;
-  password: string;
   displayName?: string;
   userName?: string;
   preferences: UserPreferences;
@@ -25,52 +19,45 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   notifications: true
 };
 
-// Simulated database
-let users: DbUser[] = [];
-
-// Helper function to hash password (in a real app, use bcrypt or similar)
-const hashPassword = (password: string): string => {
-  return btoa(password); // Base64 encoding for demo - use proper hashing in production
-};
-
-// Helper function to verify password
-const verifyPassword = (password: string, hash: string): boolean => {
-  return hashPassword(password) === hash;
-};
+const SALT_ROUNDS = 10;
 
 export const authService = {
   async signup(email: string, password: string): Promise<User> {
     // Check if user already exists
-    const existingUser = users.find(u => u.email === email);
+    const existingUser = await db.findUser(email);
     if (existingUser) {
       throw new Error('User already exists');
     }
 
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
     // Create new user
-    const newUser: DbUser = {
-      id: crypto.randomUUID(),
+    const newUser = await db.createUser({
       email,
-      password: hashPassword(password),
+      password: hashedPassword,
       preferences: DEFAULT_PREFERENCES,
       createdAt: new Date()
-    };
+    });
 
-    users.push(newUser);
+    // Send welcome email
+    await emailService.sendWelcomeEmail(email);
 
     // Return user without password
-    const { password: _, ...user } = newUser;
-    return user;
+    const { password: _, ...userWithoutPassword } = newUser;
+    return userWithoutPassword;
   },
 
   async login(email: string, password: string): Promise<User> {
     // Find user
-    const user = users.find(u => u.email === email);
+    const user = await db.findUser(email);
     if (!user) {
       throw new Error('Invalid email or password');
     }
 
     // Verify password
-    if (!verifyPassword(password, user.password)) {
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
       throw new Error('Invalid email or password');
     }
 
@@ -85,23 +72,12 @@ export const authService = {
     return JSON.parse(userJson);
   },
 
-  async updateUser(userId: string, updates: Partial<Omit<User, 'id' | 'email' | 'createdAt'>>): Promise<User> {
-    const userIndex = users.findIndex(u => u.id === userId);
-    if (userIndex === -1) {
+  async updateUser(userId: string, updates: Partial<Omit<User, '_id' | 'email' | 'createdAt'>>): Promise<User> {
+    const updatedUser = await db.updateUser(userId, updates);
+    if (!updatedUser) {
       throw new Error('User not found');
     }
 
-    const user = users[userIndex];
-    const updatedUser: DbUser = {
-      ...user,
-      ...updates,
-      preferences: {
-        ...user.preferences,
-        ...(updates.preferences || {})
-      }
-    };
-
-    users[userIndex] = updatedUser;
     const { password: _, ...userWithoutPassword } = updatedUser;
     return userWithoutPassword;
   },

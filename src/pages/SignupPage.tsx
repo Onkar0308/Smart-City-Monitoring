@@ -21,7 +21,10 @@ export function SignupPage() {
 
     try {
       await signup(email, password)
-      navigate("/dashboard", { replace: true })
+      navigate("/login", {
+        replace: true,
+        state: { message: "Account created successfully! Please log in." }
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to sign up")
     }
