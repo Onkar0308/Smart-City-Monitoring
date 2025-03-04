@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@firebase/auth": "^1.9.1",
+    "@firebase/firestore": "^4.7.9",
     "@nivo/bar": "^0.88.0",
     "@nivo/core": "^0.88.0",
     "@nivo/line": "^0.88.0",
@@ -19,10 +21,12 @@
     "@tensorflow/tfjs-node": "^4.22.0",
     "@types/axios": "^0.9.36",
     "@types/google.maps": "^3.58.1",
+    "@types/mongoose": "^5.11.96",
     "axios": "^1.8.1",
     "chart.js": "^4.4.8",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "firebase": "^11.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
